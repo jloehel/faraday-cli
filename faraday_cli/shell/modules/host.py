@@ -240,34 +240,80 @@ class HostCommands(cmd2.CommandSet):
                     )
                 if host["vulns"] > 0:
                     vulns = get_host_vulns(workspace_name, host["ip"])
-                    vulns_data = [
+                    web_vulns = {"count": 0, "value": {}}
+                    for vuln in vulns["vulnerabilities"]:
+                        if vuln["value"]["type"] != "VulnerabilityWeb":
+                            continue
+                        website = vuln["value"]["website"]
+                        tool = vuln["value"]["metadata"]["creator"]
+                        if website not in web_vulns["value"]:
+                            web_vulns["value"][website] = {}
+                        if tool not in web_vulns["value"][website]:
+                            web_vulns["value"][website][tool] = []
+                        web_vulns["value"][website][tool].append(
+                            OrderedDict(
+                                {
+                                    "ID": vuln["id"],
+                                    "SEVERITY": cmd2.style(
+                                        vuln["value"]["severity"].upper(),
+                                        fg=utils.get_severity_color(
+                                            vuln["value"]["severity"]
+                                        ),
+                                    ),
+                                    "STATUS": vuln["value"]["status"],
+                                    "CONFIRMED": vuln["value"]["confirmed"],
+                                    "NAME": vuln["value"]["name"],
+                                }
+                            )
+                        )
+                        web_vulns["count"] += 1
+                    host_vulns = [
                         OrderedDict(
                             {
-                                "ID": x["id"],
-                                "NAME": x["value"]["name"],
+                                "ID": vuln["id"],
+                                "NAME": vuln["value"]["name"],
                                 "SEVERITY": cmd2.style(
-                                    x["value"]["severity"].upper(),
+                                    vuln["value"]["severity"].upper(),
                                     fg=utils.get_severity_color(
-                                        x["value"]["severity"]
+                                        vuln["value"]["severity"]
                                     ),
                                 ),
-                                "STATUS": x["value"]["status"],
-                                "CONFIRMED": x["value"]["confirmed"],
-                                "TOOL": x["value"]["metadata"]["creator"],
+                                "STATUS": vuln["value"]["status"],
+                                "CONFIRMED": vuln["value"]["confirmed"],
+                                "TOOL": vuln["value"]["metadata"]["creator"],
                             }
                         )
-                        for x in vulns["vulnerabilities"]
+                        for vuln in vulns["vulnerabilities"]
+                        if vuln["value"]["type"] != "VulnerabilityWeb"
                     ]
-                    self._cmd.print_output("\nVulnerabilities:")
+                    self._cmd.print_output(f"\n# Vulnerabilities ({vulns['count']}):")
+                    self._cmd.print_output(
+                        f"\n## Host Vulnerabilities ({len(host_vulns)}):")
                     self._cmd.print_output(
                         tabulate(
-                            vulns_data,
+                            host_vulns,
                             headers="keys",
                             tablefmt=self._cmd.TABLE_PRETTY_FORMAT
                             if args.pretty
                             else "simple",
                         )
                     )
+                    self._cmd.print_output(
+                        f"\n## Web Vulnerabilities ({web_vulns['count']}):")
+                    for website, tools in web_vulns["value"].items():
+                        self._cmd.print_output(f"\n * {website}:")
+                        for tool, vulns in tools.items():
+                            self._cmd.print_output(f"\n  --- {tool} ({len(vulns)}) ---")
+                            self._cmd.print_output(
+                                tabulate(
+                                    vulns,
+                                    headers="keys",
+                                    tablefmt=self._cmd.TABLE_PRETTY_FORMAT
+                                    if args.pretty
+                                    else "simple",
+                                    maxcolwidths=[None, None, None, None, 90],
+                                )
+                            )
 
     # Delete Host
     delete_host_parser = argparse.ArgumentParser()
